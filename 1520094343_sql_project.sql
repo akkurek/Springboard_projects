@@ -33,9 +33,9 @@ WHERE membercost != 0.0
 
 /* Q2: How many facilities do not charge a fee to members? */
 
-SELECT COUNT( membercost ) AS '#of_facilities_w/o_fee'
+SELECT COUNT( membercost ) AS 'facilities_w/o_fee'
  FROM Facilities
-WHERE membercost =0
+WHERE membercost = 0
 
 /* Q3: How can you produce a list of facilities that charge a fee to members,
 where the fee is less than 20% of the facility's monthly maintenance cost?
@@ -77,13 +77,13 @@ Include in your output the name of the court, and the name of the member
 formatted as a single column. Ensure no duplicate data, and order by
 the member name. */
 
-SELECT member.firstname AS member_name, facility.name AS facility_name
- FROM Members member
-JOIN Facilities facility
-JOIN Bookings booking 
-ON booking.memid = member.memid AND booking.facid = facility.facid
-WHERE facility.facid IN ( 0, 1 )
-GROUP BY member.memid
+SELECT  CONCAT(name , ':', firstname, ' ', surname) FROM Members, Facilities 
+	WHERE (memid, facid) IN 
+		(SELECT DISTINCT memid, facid FROM Bookings 
+				WHERE facid IN
+					(SELECT facid FROM Facilities WHERE name LIKE '%Tennis Court%') 
+		)
+ORDER BY surname
 
 
 /* Q8: How can you produce a list of bookings on the day of 2012-09-14 which
@@ -93,9 +93,9 @@ the guest user's ID is always 0. Include in your output the name of the
 facility, the name of the member formatted as a single column, and the cost.
 Order by descending cost, and do not use any subqueries. */
 
-SELECT facilities.name, CONCAT( members.firstname, '_', members.surname ) AS member_name,
-      CASE WHEN members.memid =0 THEN facilities.guestcost * bookings.slots
-      ELSE facilities.membercost * bookings.slots END AS costs
+SELECT facilities.name, CONCAT( members.firstname, '_', members.surname ) AS GUEST,
+                CASE WHEN members.memid =0 THEN facilities.guestcost * bookings.slots
+                          ELSE facilities.membercost * bookings.slots END AS costs
  FROM Bookings bookings
 JOIN Facilities facilities ON bookings.facid = facilities.facid
 JOIN Members members ON bookings.memid = members.memid
@@ -105,25 +105,34 @@ ORDER BY costs DESC
 
 /* Q9: This time, produce the same result as in Q8, but using a subquery. */
 
-SELECT facilities.name, CONCAT( members.firstname, '_', members.surname ) AS member_name,
-      CASE WHEN members.memid =0 THEN facilities.guestcost * bookings.slots
-      ELSE facilities.membercost * bookings.slots END AS costs
- FROM (SELECT memid, facid, slots FROM Bookings WHERE Bookings.starttime LIKE '2012-09-14%')bookings
-JOIN Facilities facilities ON bookings.facid = facilities.facid
-JOIN Members members ON bookings.memid = members.memid
-HAVING costs >30
-ORDER BY costs DESC
+SELECT name, CONCAT(firstname, ' ', surname), slots*slotcost AS cost FROM Members,
+	(SELECT  memid, name, slots, 
+		CASE WHEN memid = 0 THEN guestcost
+			  ELSE membercost END AS slotcost
+	FROM Facilities,
+			(SELECT memid, facid, slots
+				FROM Bookings
+				WHERE starttime LIKE '%2012-09-14%') AS SLOTS
+	WHERE Facilities.facid = SLOTS.facid) AS MEMCOST
+WHERE Members.memid = MEMCOST.memid
+HAVING cost > 30
+ORDER BY cost DESCC
 
 /* Q10: Produce a list of facilities with a total revenue less than 1000.
 The output of facility name and total revenue, sorted by revenue. Remember
 that there's a different cost for guests and members! */
 
-SELECT facility_name, SUM(costs) - monthlymaintenance AS total_revenue
- FROM (SELECT facilities.name AS facility_name, monthlymaintenance,
-      CASE WHEN members.memid =0 THEN facilities.guestcost * bookings.slots
-      ELSE facilities.membercost * bookings.slots END AS costs
- FROM Bookings bookings
-JOIN Facilities facilities ON bookings.facid = facilities.facid
-JOIN Members members ON bookings.memid = members.memid) AS total_cost
-GROUP BY facility_name
-HAVING total_revenue <1000
+SELECT name, totalslots * cost AS revenue
+FROM Facilities
+JOIN
+	(SELECT Facilities.facid AS ID, memid, SUM(slots) AS totalslots,
+		CASE WHEN memid = 0 THEN guestcost
+            ELSE membercost END AS cost
+	FROM Facilities
+	JOIN Bookings 
+	ON Facilities.facid = Bookings.facid
+	GROUP BY Facilities.facid, memid) AS COSTS
+ON facid = COSTS.ID
+WHERE totalslots * cost < 1000
+GROUP BY facid
+ORDER BY revenue
