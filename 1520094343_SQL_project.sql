@@ -122,17 +122,18 @@ ORDER BY cost DESCC
 The output of facility name and total revenue, sorted by revenue. Remember
 that there's a different cost for guests and members! */
 
-SELECT name, totalslots * cost AS revenue
-FROM Facilities
-JOIN
-	(SELECT Facilities.facid AS ID, memid, SUM(slots) AS totalslots,
-		CASE WHEN memid = 0 THEN guestcost
-            ELSE membercost END AS cost
-	FROM Facilities
-	JOIN Bookings 
-	ON Facilities.facid = Bookings.facid
-	GROUP BY Facilities.facid, memid) AS COSTS
-ON facid = COSTS.ID
-WHERE totalslots * cost < 1000
-GROUP BY facid
-ORDER BY revenue
+SELECT sub.name, sub.revenue
+
+FROM (
+SELECT name,
+       CASE WHEN Bookings.memid != 0 THEN (slots * membercost)
+       WHEN Bookings.memid = 0 THEN (slots * guestcost)
+       END
+       AS revenue
+FROM Bookings
+  JOIN Facilities 
+  ON Bookings.facid = Facilities.facid
+  ORDER BY revenue DESC) AS sub
+
+GROUP BY sub.name
+ORDER BY sub.revenue DES
